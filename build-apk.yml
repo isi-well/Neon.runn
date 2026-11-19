@@ -1,0 +1,55 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Prepare files
+        run: |
+          mkdir -p www assets
+          cp index.html www/index.html
+          cp neon-runner-icon-1024.png assets/icon-only.png
+
+      - name: Setup Capacitor and Android project
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets
+          npx cap init "Neon Runner" com.neonrunner.game --web-dir www
+          npx cap add android
+
+      - name: Generate app icons
+        run: npx capacitor-assets generate --android --iconBackgroundColor "#0a0a12" --iconBackgroundColorDark "#0a0a12" || true
+
+      - name: Landscape and fullscreen
+        run: |
+          sed -i 's/<activity/<activity android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's#<item name="android:background">@null</item>#<item name="android:background">@null</item><item name="android:windowFullscreen">true</item>#' android/app/src/main/res/values/styles.xml || true
+
+      - name: Sync
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-runner-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
